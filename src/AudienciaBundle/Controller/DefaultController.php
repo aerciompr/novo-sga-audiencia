@@ -539,21 +539,8 @@ class DefaultController extends AbstractController
             throw new Exception($translator->trans('error.attendance.not_in_process', [], self::DOMAIN));
         }
 
-        $serviceId = (int) $atual->getServico()->getId();
-        $codificacaoExiste = (int) $this->getDoctrine()->getConnection()->fetchOne(
-            'SELECT COUNT(*) FROM atendimentos_codificados WHERE atendimento_id = :atendimentoId AND servico_id = :servicoId',
-            [
-                'atendimentoId' => (int) $atual->getId(),
-                'servicoId' => $serviceId,
-            ]
-        ) > 0;
-        $codificacoes = $codificacaoExiste ? [] : [$serviceId];
-
-        $atendimentoService->encerrar($atual, $unidade, $codificacoes);
-        $this->getDoctrine()->getConnection()->executeStatement(
-            "UPDATE audiencia_pessoa SET situacao = 'finalizado' WHERE atendimento_id = :atendimentoId",
-            ['atendimentoId' => $atual->getId()]
-        );
+        $conn = $this->getDoctrine()->getConnection();
+        $this->encerrarAtendimentoComProtecao($atendimentoService, $atual, $unidade, $conn);
 
         return $this->json(new Envelope());
     }
@@ -566,13 +553,27 @@ class DefaultController extends AbstractController
         /** @var Usuario */
         $usuario = $this->getUser();
         $unidade = $usuario->getLotacao()->getUnidade();
+        $conn = $this->getDoctrine()->getConnection();
+        $this->assertAudienciaDaUnidadeExiste($id, (int) $unidade->getId(), $conn);
+
         $atual = $atendimentoService->atendimentoAndamento($usuario->getId(), $unidade);
 
         if ($atual) {
-            throw new Exception('Finalize o atendimento em andamento antes de concluir a audiência');
+            $atendimentoDaAudiencia = (int) $conn->fetchOne(
+                'SELECT COUNT(*) FROM audiencia_pessoa WHERE audiencia_id = :audienciaId AND atendimento_id = :atendimentoId',
+                [
+                    'audienciaId' => $id,
+                    'atendimentoId' => (int) $atual->getId(),
+                ]
+            ) > 0;
+
+            if (!$atendimentoDaAudiencia) {
+                throw new Exception('Existe atendimento em andamento de outra audiência. Finalize ele antes de concluir esta audiência.');
+            }
+
+            $this->encerrarAtendimentoComProtecao($atendimentoService, $atual, $unidade, $conn);
         }
 
-        $conn = $this->getDoctrine()->getConnection();
         $updated = $conn->update('audiencia', [
             'status' => 'finalizada',
         ], [
@@ -593,6 +594,44 @@ class DefaultController extends AbstractController
         if (!$exists) {
             throw new Exception('Audiência não encontrada');
         }
+    }
+
+    private function assertAudienciaDaUnidadeExiste(int $id, int $unidadeId, $conn): void
+    {
+        $exists = $conn->fetchOne(
+            'SELECT id FROM audiencia WHERE id = :id AND unidade_id = :unidadeId',
+            [
+                'id' => $id,
+                'unidadeId' => $unidadeId,
+            ]
+        );
+
+        if (!$exists) {
+            throw new Exception('Audiência não encontrada');
+        }
+    }
+
+    private function encerrarAtendimentoComProtecao(
+        AtendimentoService $atendimentoService,
+        Atendimento $atendimento,
+        $unidade,
+        $conn
+    ): void {
+        $serviceId = (int) $atendimento->getServico()->getId();
+        $codificacaoExiste = (int) $conn->fetchOne(
+            'SELECT COUNT(*) FROM atendimentos_codificados WHERE atendimento_id = :atendimentoId AND servico_id = :servicoId',
+            [
+                'atendimentoId' => (int) $atendimento->getId(),
+                'servicoId' => $serviceId,
+            ]
+        ) > 0;
+        $codificacoes = $codificacaoExiste ? [] : [$serviceId];
+
+        $atendimentoService->encerrar($atendimento, $unidade, $codificacoes);
+        $conn->executeStatement(
+            "UPDATE audiencia_pessoa SET situacao = 'finalizado' WHERE atendimento_id = :atendimentoId",
+            ['atendimentoId' => $atendimento->getId()]
+        );
     }
 
     private function resolveServiceIdForTipo(string $tipo, UsuarioService $usuarioService, Usuario $usuario, $unidade): int

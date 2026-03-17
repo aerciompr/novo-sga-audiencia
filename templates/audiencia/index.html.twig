@@ -310,7 +310,11 @@
                     App.ajax({
                         url: App.url('/audiencia/audiencias/' + audiencia.id + '/finalizar'),
                         type: 'post',
-                        success: () => this.carregarAudiencias(),
+                        success: () => {
+                            this.atendimento = null;
+                            this.carregarAudiencias();
+                            this.carregarAtendimentoAtual();
+                        },
                         complete: () => this.busy = false,
                     });
                 },
