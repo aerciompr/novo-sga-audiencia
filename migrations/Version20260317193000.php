@@ -21,6 +21,7 @@ final class Version20260317193000 extends AbstractVersion
                 id INT AUTO_INCREMENT NOT NULL,
                 unidade_id INT NOT NULL,
                 titulo VARCHAR(120) NOT NULL,
+                sala VARCHAR(60) NOT NULL,
                 status VARCHAR(20) NOT NULL,
                 criado_em DATETIME NOT NULL,
                 INDEX IDX_AUDIENCIA_UNIDADE (unidade_id),

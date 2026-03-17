@@ -41,6 +41,7 @@
             <div class="card-body">
                 <form class="form-inline" @submit.prevent="criarAudiencia">
                     <input type="text" class="form-control mr-2" v-model="novo.tituloAudiencia" :placeholder="labels.audienceTitle" required>
+                    <input type="text" class="form-control mr-2" v-model="novo.salaAudiencia" :placeholder="labels.audienceRoom" required>
                     <button type="submit" class="btn btn-primary" :disabled="busy">{{ 'button.create_audience'|trans }}</button>
                 </form>
             </div>
@@ -49,7 +50,7 @@
         <div class="card mb-3" v-for="audiencia in audiencias" :key="audiencia.id">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <strong>{% verbatim %}{{ audiencia.titulo }}{% endverbatim %}</strong>
-                <span class="badge badge-light">ID {% verbatim %}{{ audiencia.id }}{% endverbatim %}</span>
+                <span class="badge badge-light">{% verbatim %}{{ audiencia.sala }}{% endverbatim %}</span>
             </div>
             <div class="card-body">
                 <form class="form-row align-items-end mb-3" @submit.prevent="adicionarParte(audiencia)">
@@ -180,6 +181,7 @@
                 audiencias: [],
                 novo: {
                     tituloAudiencia: '',
+                    salaAudiencia: '',
                 },
                 novoLocal: {
                     local: local ? local.id : null,
@@ -188,6 +190,7 @@
                 },
                 labels: {
                     audienceTitle: '{{ 'label.audience_title_placeholder'|trans }}',
+                    audienceRoom: '{{ 'label.audience_room_placeholder'|trans }}',
                     partName: '{{ 'label.part_name_placeholder'|trans }}',
                     witnessName: '{{ 'label.witness_name_placeholder'|trans }}',
                     document: '{{ 'label.document_placeholder'|trans }}',
@@ -233,16 +236,17 @@
                     });
                 },
                 criarAudiencia() {
-                    if (!this.novo.tituloAudiencia) {
+                    if (!this.novo.tituloAudiencia || !this.novo.salaAudiencia) {
                         return;
                     }
                     this.busy = true;
                     App.ajax({
                         url: App.url('/audiencia/audiencias'),
                         type: 'post',
-                        data: { titulo: this.novo.tituloAudiencia },
+                        data: { titulo: this.novo.tituloAudiencia, sala: this.novo.salaAudiencia },
                         success: () => {
                             this.novo.tituloAudiencia = '';
+                            this.novo.salaAudiencia = '';
                             this.carregarAudiencias();
                         },
                         complete: () => this.busy = false,
@@ -307,9 +311,13 @@
                     if (!this.atendimento) {
                         return;
                     }
+                    const pessoaId = this.buscarPessoaPorAtendimento(this.atendimento.id);
+                    if (!pessoaId) {
+                        return;
+                    }
                     this.busy = true;
                     App.ajax({
-                        url: App.url('/audiencia/pessoas/' + this.buscarPessoaPorAtendimento(this.atendimento.id) + '/chamar'),
+                        url: App.url('/audiencia/pessoas/' + pessoaId + '/chamar'),
                         type: 'post',
                         complete: () => {
                             setTimeout(() => this.busy = false, 1000);

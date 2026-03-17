@@ -81,7 +81,7 @@ class DefaultController extends AbstractController
         $conn = $this->getDoctrine()->getConnection();
 
         $audiencias = $conn->fetchAllAssociative(
-            'SELECT id, titulo, status, criado_em FROM audiencia WHERE unidade_id = :unidadeId ORDER BY id DESC',
+            'SELECT id, titulo, sala, status, criado_em FROM audiencia WHERE unidade_id = :unidadeId ORDER BY id DESC',
             ['unidadeId' => $unidade->getId()]
         );
 
@@ -133,9 +133,13 @@ class DefaultController extends AbstractController
     {
         $data = json_decode($request->getContent(), true) ?: [];
         $titulo = trim((string) ($data['titulo'] ?? ''));
+        $sala = trim((string) ($data['sala'] ?? ''));
 
         if ($titulo === '') {
             throw new Exception('Informe o título da audiência');
+        }
+        if ($sala === '') {
+            throw new Exception('Informe a sala da audiência');
         }
 
         /** @var Usuario */
@@ -146,6 +150,7 @@ class DefaultController extends AbstractController
         $conn->insert('audiencia', [
             'unidade_id' => $unidade->getId(),
             'titulo' => $titulo,
+            'sala' => $sala,
             'status' => 'ativa',
             'criado_em' => date('Y-m-d H:i:s'),
         ]);
@@ -239,7 +244,10 @@ class DefaultController extends AbstractController
         $usuario = $this->getUser();
         $unidade = $usuario->getLotacao()->getUnidade();
 
-        $pessoa = $conn->fetchAssociative('SELECT * FROM audiencia_pessoa WHERE id = :id', ['id' => $id]);
+        $pessoa = $conn->fetchAssociative(
+            'SELECT p.*, a.sala FROM audiencia_pessoa p INNER JOIN audiencia a ON a.id = p.audiencia_id WHERE p.id = :id',
+            ['id' => $id]
+        );
         if (!$pessoa) {
             throw new Exception('Pessoa da audiência não encontrada');
         }
@@ -288,6 +296,7 @@ class DefaultController extends AbstractController
         }
 
         $atendimentoService->chamarSenha($unidade, $atendimento);
+        $this->atualizarMensagemPainel($atendimento, (string) $pessoa['nome'], (string) $pessoa['sala']);
 
         return $this->json(new Envelope($atendimento->jsonSerialize()));
     }
@@ -474,6 +483,47 @@ class DefaultController extends AbstractController
         }
 
         return (int) $prioridade->getId();
+    }
+
+    private function atualizarMensagemPainel(Atendimento $atendimento, string $nomePessoa, string $sala): void
+    {
+        try {
+            $senha = $atendimento->getSenha();
+            $servico = $atendimento->getServico();
+            $unidade = $atendimento->getUnidade();
+
+            $conn = $this->getDoctrine()->getConnection();
+            $painelId = $conn->fetchOne(
+                'SELECT id FROM painel_senha
+                 WHERE unidade_id = :unidade
+                   AND servico_id = :servico
+                   AND num_senha = :numero
+                   AND sig_senha = :sigla
+                 ORDER BY id DESC
+                 LIMIT 1',
+                [
+                    'unidade' => $unidade->getId(),
+                    'servico' => $servico->getId(),
+                    'numero' => $senha->getNumero(),
+                    'sigla' => $senha->getSigla(),
+                ]
+            );
+
+            if ($painelId) {
+                $mensagem = trim($nomePessoa . ' - ' . $sala);
+                $conn->update(
+                    'painel_senha',
+                    [
+                        'msg_senha' => mb_substr($mensagem, 0, 255),
+                        'local' => mb_substr($sala, 0, 20),
+                        'nome_cliente' => mb_substr($nomePessoa, 0, 100),
+                    ],
+                    ['id' => (int) $painelId]
+                );
+            }
+        } catch (\Throwable $e) {
+            // evita quebrar o fluxo de chamada caso a customização do painel falhe
+        }
     }
 
     private function getLocalAtendimento(UsuarioService $usuarioService, Usuario $usuario)
