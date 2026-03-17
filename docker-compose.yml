@@ -3,7 +3,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: aerciompr/novo-sga-audiencia:latest
     restart: always
     depends_on:
       - mysqldb
