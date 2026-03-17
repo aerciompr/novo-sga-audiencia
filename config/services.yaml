@@ -20,6 +20,7 @@ services:
         resource: '../src/'
         exclude:
             - '../src/DependencyInjection/'
+            - '../src/AudienciaBundle/'
             - '../src/Entity/'
             - '../src/Kernel.php'
             - '../src/Tests/'
