@@ -123,7 +123,7 @@ abstract class RelationalStorage extends DoctrineStorage
                 $this->om->rollback();
             } catch (Exception $ex) {
             }
-            throw new $e;
+            throw $e;
         }
     }
     

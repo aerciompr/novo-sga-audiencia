@@ -88,10 +88,11 @@ class DefaultController extends AbstractController
 
         foreach ($audiencias as &$audiencia) {
             $pessoas = $conn->fetchAllAssociative(
-                'SELECT id, audiencia_id, parte_id, tipo, nome, documento, atendimento_id, criado_em
-                 FROM audiencia_pessoa
+                'SELECT p.id, p.audiencia_id, p.parte_id, p.tipo, p.nome, p.documento, p.atendimento_id, p.criado_em, a.status AS atendimento_status
+                 FROM audiencia_pessoa p
+                 LEFT JOIN atendimentos a ON a.id = p.atendimento_id
                  WHERE audiencia_id = :audienciaId
-                 ORDER BY id ASC',
+                 ORDER BY p.id ASC',
                 ['audienciaId' => (int) $audiencia['id']]
             );
 
@@ -235,12 +236,18 @@ class DefaultController extends AbstractController
     {
         $conn = $this->getDoctrine()->getConnection();
         $parte = $conn->fetchAssociative(
-            'SELECT id, audiencia_id FROM audiencia_pessoa WHERE id = :id AND tipo = :tipo',
+            'SELECT p.id, p.audiencia_id, p.atendimento_id, a.status AS atendimento_status
+             FROM audiencia_pessoa p
+             LEFT JOIN atendimentos a ON a.id = p.atendimento_id
+             WHERE p.id = :id AND p.tipo = :tipo',
             ['id' => $id, 'tipo' => 'parte']
         );
 
         if (!$parte) {
             throw new Exception('Parte não encontrada');
+        }
+        if (($parte['atendimento_status'] ?? null) === 'iniciado') {
+            throw new Exception('Não é possível excluir uma parte com audiência iniciada');
         }
 
         $conn->beginTransaction();
@@ -310,6 +317,13 @@ class DefaultController extends AbstractController
         }
 
         if ($atual && (!$atendimento || $atual->getId() !== $atendimento->getId())) {
+            if ($pessoa['tipo'] === 'testemunha' && $atual->getStatus() === 'iniciado') {
+                // Reusa o atendimento em andamento da parte apenas para emitir a chamada da testemunha no painel.
+                $atendimentoService->chamarSenha($unidade, $atual);
+                $this->atualizarMensagemPainel($atual, (string) $pessoa['nome'], (string) $pessoa['sala']);
+
+                return $this->json(new Envelope($atual->jsonSerialize()));
+            }
             throw new Exception($translator->trans('error.attendance.in_process', [], self::DOMAIN));
         }
 

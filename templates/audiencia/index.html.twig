@@ -72,10 +72,10 @@
                                 <strong>{% verbatim %}{{ parte.nome }}{% endverbatim %}</strong>
                             </div>
                             <div>
-                                <button type="button" class="btn btn-sm btn-primary" :disabled="busy" @click="chamarPessoa(parte)">
+                                <button type="button" class="btn btn-sm btn-primary" :disabled="busy" @click="chamarPessoa(parte)" v-if="parte.atendimento_status !== 'iniciado'">
                                     {{ 'button.call_part'|trans }}
                                 </button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" :disabled="busy" @click="removerParte(parte)">
+                                <button type="button" class="btn btn-sm btn-outline-danger" :disabled="busy" @click="removerParte(parte)" v-if="parte.atendimento_status !== 'iniciado'">
                                     {{ 'button.delete_part'|trans }}
                                 </button>
                             </div>
