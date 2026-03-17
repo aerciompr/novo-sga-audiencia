@@ -4,6 +4,7 @@ namespace App\AudienciaBundle\Controller;
 
 use Exception;
 use Novosga\Entity\Atendimento;
+use Novosga\Entity\Cliente;
 use Novosga\Entity\Local;
 use Novosga\Entity\Prioridade;
 use Novosga\Entity\ServicoUsuario;
@@ -315,13 +316,16 @@ class DefaultController extends AbstractController
         if (!$atendimento) {
             $serviceId = $this->resolveServiceIdForTipo($pessoa['tipo'], $usuarioService, $usuario, $unidade);
             $prioridadeId = $this->resolvePrioridadePadraoId();
+            $cliente = new Cliente();
+            $cliente->setNome((string) $pessoa['nome']);
+            $cliente->setDocumento(sprintf('AUD-%d-%d', (int) $pessoa['id'], time()));
 
             $atendimento = $atendimentoService->distribuiSenha(
                 $unidade->getId(),
                 $usuario->getId(),
                 $serviceId,
                 $prioridadeId,
-                null
+                $cliente
             );
 
             $conn->update('audiencia_pessoa', [
