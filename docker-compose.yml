@@ -13,7 +13,7 @@ services:
       APP_ENV: 'prod'
       LANGUAGE: 'pt_BR'
       APP_LANGUAGE: 'pt_BR'
-      DATABASE_URL: 'mysql://novosga:MySQL_App_P4ssW0rd@mysqldb:3306/novosga2?charset=utf8mb4&serverVersion=8.0'
+      DATABASE_URL: 'mysql://novosga:MySQL_App_P4ssW0rd@mysqldb:3306/novosga2?charset=utf8mb4&serverVersion=5.7'
       NOVOSGA_ADMIN_USERNAME: 'admin'
       NOVOSGA_ADMIN_PASSWORD: '123456'
       NOVOSGA_ADMIN_FIRSTNAME: 'Administrador'
@@ -43,7 +43,7 @@ services:
       MERCURE_EXTRA_DIRECTIVES: 'anonymous 1; cors_origins *'
 
   mysqldb:
-    image: mysql:8.0
+    image: mysql:5.7
     restart: always
     ports:
       - "7003:3306"
