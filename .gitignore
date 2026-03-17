@@ -1,0 +1,23 @@
+config/app.php
+nbproject/
+modules/*
+
+###> symfony/framework-bundle ###
+/.env.local
+/.env.local.php
+/.env.*.local
+/config/secrets/prod/prod.decrypt.private.php
+/public/bundles/
+/var/
+/vendor/
+###< symfony/framework-bundle ###
+
+# workspace artifacts
+/novosga-master/
+/novosga-master.zip
+/core-2.2/
+/core-v2.2.zip
+/attendance-bundle-2.1/
+/attendance-bundle-2.2/
+/attendance-v2.1.zip
+/attendance-v2.2.zip

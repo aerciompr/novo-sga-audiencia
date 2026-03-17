@@ -1,0 +1,259 @@
+{% extends 'base.html.twig' %}
+
+{% trans_default_domain 'AudienciaBundle' %}
+
+{% block body %}
+    <div id="audiencia" v-cloak>
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <a href="#dialog-local" data-toggle="modal" class="btn btn-outline-secondary btn-block">
+                    <strong v-text="usuario.local ? usuario.local.nome : '{{ 'label.place'|trans }}'"></strong>
+                    <span class="ml-2" v-text="usuario.numeroLocal"></span>
+                </a>
+                <small class="text-muted d-block mt-2">{{ 'label.attendance_type'|trans }}: {% verbatim %}{{ tiposAtendimento[usuario.tipoAtendimento] }}{% endverbatim %}</small>
+            </div>
+            <div class="col-md-9 text-right">
+                <button type="button" class="btn btn-secondary" :disabled="!atendimento || busy" @click="chamarNovamente">
+                    {{ 'button.call_again'|trans }}
+                </button>
+                <button type="button" class="btn btn-primary" :disabled="!atendimento || atendimento.status !== 'chamado' || busy" @click="iniciar">
+                    {{ 'button.start'|trans }}
+                </button>
+                <button type="button" class="btn btn-warning" :disabled="!atendimento || busy" @click="naoCompareceu">
+                    {{ 'button.no_show'|trans }}
+                </button>
+                <button type="button" class="btn btn-success" :disabled="!atendimento || busy" @click="encerrar">
+                    {{ 'button.finish'|trans }}
+                </button>
+            </div>
+        </div>
+
+        <div class="card mb-4" v-if="atendimento">
+            <div class="card-header">{{ 'label.current_call'|trans }}</div>
+            <div class="card-body">
+                <strong>{% verbatim %}{{ atendimento.senha.format }}{% endverbatim %}</strong>
+                <span class="ml-2">{% verbatim %}{{ atendimento.servico.nome }}{% endverbatim %}</span>
+                <span class="badge badge-info ml-2">{% verbatim %}{{ atendimento.status }}{% endverbatim %}</span>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>{{ 'queue.partes'|trans }}</span>
+                        <span class="badge badge-primary">{% verbatim %}{{ filas.parte.length }}{% endverbatim %}</span>
+                    </div>
+                    <ul class="list-group list-group-flush" v-if="filas.parte.length">
+                        <li class="list-group-item d-flex justify-content-between align-items-center" v-for="item in filas.parte" :key="item.id">
+                            <div>
+                                <strong>{% verbatim %}{{ item.senha.format }}{% endverbatim %}</strong>
+                                <small class="text-muted d-block">{% verbatim %}{{ item.servico.nome }}{% endverbatim %}</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" :disabled="busy" @click="chamarAtendimento(item)">
+                                {{ 'button.call'|trans }}
+                            </button>
+                        </li>
+                    </ul>
+                    <div class="card-body text-muted" v-else>{{ 'queue.empty'|trans }}</div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>{{ 'queue.testemunhas'|trans }}</span>
+                        <span class="badge badge-primary">{% verbatim %}{{ filas.testemunha.length }}{% endverbatim %}</span>
+                    </div>
+                    <ul class="list-group list-group-flush" v-if="filas.testemunha.length">
+                        <li class="list-group-item d-flex justify-content-between align-items-center" v-for="item in filas.testemunha" :key="item.id">
+                            <div>
+                                <strong>{% verbatim %}{{ item.senha.format }}{% endverbatim %}</strong>
+                                <small class="text-muted d-block">{% verbatim %}{{ item.servico.nome }}{% endverbatim %}</small>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" :disabled="busy" @click="chamarAtendimento(item)">
+                                {{ 'button.call'|trans }}
+                            </button>
+                        </li>
+                    </ul>
+                    <div class="card-body text-muted" v-else>{{ 'queue.empty'|trans }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="dialog-local" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form @submit.prevent="setLocal">
+                        <div class="modal-header">
+                            <h5 class="modal-title">{{ 'modal.place'|trans }}</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="form-group">
+                                <label>{{ 'label.place.number'|trans }}</label>
+                                <input type="number" class="form-control" v-model.number="novoLocal.numeroLocal" required>
+                            </div>
+                            <div class="form-group">
+                                <label>{{ 'label.attendance_type'|trans }}</label>
+                                <select class="form-control" v-model="novoLocal.tipoAtendimento" required>
+                                    {% for value, label in tiposAtendimento %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>{{ 'label.place'|trans }}</label>
+                                <select class="form-control" v-model="novoLocal.local" required>
+                                    {% for l in locais %}
+                                        <option :value="{{ l.id }}">{{ l.nome }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="submit" class="btn btn-primary">{{ 'button.save'|trans }}</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    <script>
+        const local = {{ local|json_encode|raw }};
+        const numeroLocal = {{ numeroLocal ? numeroLocal : 'null' }};
+        const usuario = {{ usuario|json_encode()|raw }};
+        const unidade = {{ unidade|json_encode()|raw }};
+        const atendimento = {{ atendimento|json_encode()|raw }};
+        const tipoAtendimento = "{{ tipoAtendimento ? tipoAtendimento : 'null' }}";
+        const tiposAtendimento = {{ tiposAtendimento|json_encode()|raw }};
+
+        new Vue({
+            el: '#audiencia',
+            data: {
+                busy: false,
+                usuario: {
+                    id: usuario.id,
+                    local: local,
+                    numeroLocal: numeroLocal,
+                    tipoAtendimento: tipoAtendimento,
+                },
+                unidade: unidade || {},
+                atendimento: atendimento || null,
+                tiposAtendimento: tiposAtendimento,
+                filas: {
+                    parte: [],
+                    testemunha: [],
+                },
+                novoLocal: {
+                    local: local ? local.id : null,
+                    numeroLocal: numeroLocal,
+                    tipoAtendimento: tipoAtendimento,
+                },
+            },
+            methods: {
+                update() {
+                    App.ajax({
+                        url: App.url('/audiencia/ajax_update'),
+                        success: (response) => {
+                            const data = response.data || {};
+                            this.filas = data.filas || { parte: [], testemunha: [] };
+                            this.usuario = data.usuario || this.usuario;
+                        },
+                    });
+
+                    App.ajax({
+                        url: App.url('/audiencia/atendimento'),
+                        success: (response) => {
+                            this.atendimento = response.data || null;
+                        },
+                    });
+                },
+                setLocal() {
+                    App.ajax({
+                        url: App.url('/audiencia/set_local'),
+                        type: 'post',
+                        data: this.novoLocal,
+                        success: (response) => {
+                            this.usuario.local = response.data.local;
+                            this.usuario.numeroLocal = response.data.numero;
+                            this.usuario.tipoAtendimento = response.data.tipo;
+                            this.novoLocal.local = response.data.local.id;
+                            $('#dialog-local').modal('hide');
+                            this.update();
+                        },
+                    });
+                },
+                chamarAtendimento(item) {
+                    this.busy = true;
+                    App.ajax({
+                        url: App.url('/audiencia/chamar/atendimento/' + item.id),
+                        type: 'post',
+                        success: (response) => {
+                            this.atendimento = response.data;
+                            this.update();
+                        },
+                        complete: () => {
+                            setTimeout(() => this.busy = false, 800);
+                        },
+                    });
+                },
+                chamarNovamente() {
+                    if (!this.atendimento) {
+                        return;
+                    }
+                    this.chamarAtendimento(this.atendimento);
+                },
+                iniciar() {
+                    App.ajax({
+                        url: App.url('/audiencia/iniciar'),
+                        type: 'post',
+                        success: (response) => {
+                            this.atendimento = response.data;
+                        },
+                    });
+                },
+                naoCompareceu() {
+                    App.ajax({
+                        url: App.url('/audiencia/nao_compareceu'),
+                        type: 'post',
+                        success: () => {
+                            this.atendimento = null;
+                            this.update();
+                        },
+                    });
+                },
+                encerrar() {
+                    App.ajax({
+                        url: App.url('/audiencia/encerrar'),
+                        type: 'post',
+                        success: () => {
+                            this.atendimento = null;
+                            this.update();
+                        },
+                    });
+                },
+            },
+            mounted() {
+                if (!this.usuario.local) {
+                    $('#dialog-local').modal('show');
+                }
+
+                this.update();
+
+                App.SSE.connect([
+                    '/unidades/' + this.unidade.id + '/fila',
+                    '/usuarios/' + this.usuario.id + '/fila',
+                ]);
+                App.SSE.onmessage = () => this.update();
+                App.SSE.ondisconnect = () => this.update();
+            },
+        });
+    </script>
+{% endblock %}

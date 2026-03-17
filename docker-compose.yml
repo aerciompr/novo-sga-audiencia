@@ -1,0 +1,61 @@
+services:
+  novosga:
+    image: novosga/novosga:latest
+    restart: always
+    depends_on:
+      - mysqldb
+      - mercure
+    ports:
+      - "7001:8080"
+    environment:
+      APP_ENV: 'prod'
+      DATABASE_URL: 'mysql://novosga:MySQL_App_P4ssW0rd@mysqldb:3306/novosga2?charset=utf8mb4&serverVersion=8.0'
+      NOVOSGA_ADMIN_USERNAME: 'admin'
+      NOVOSGA_ADMIN_PASSWORD: '123456'
+      NOVOSGA_ADMIN_FIRSTNAME: 'Administrador'
+      NOVOSGA_ADMIN_LASTNAME: 'Global'
+      NOVOSGA_UNITY_NAME: 'Minha unidade'
+      NOVOSGA_UNITY_CODE: 'U01'
+      NOVOSGA_NOPRIORITY_NAME: 'Normal'
+      NOVOSGA_NOPRIORITY_DESCRIPTION: 'Atendimento normal'
+      NOVOSGA_PRIORITY_NAME: 'Prioridade'
+      NOVOSGA_PRIORITY_DESCRIPTION: 'Atendimento prioritário'
+      NOVOSGA_PLACE_NAME: 'Guichê'
+      TZ: 'America/Sao_Paulo'
+      APP_LANGUAGE: 'pt_BR'
+      MERCURE_URL: 'http://mercure:3000/.well-known/mercure'
+      MERCURE_PUBLIC_URL: 'http://${PUBLIC_HOST:-localhost}:7002/.well-known/mercure'
+      MERCURE_JWT_SECRET: '!ChangeThisMercureHubJWTSecretKey!'
+    volumes:
+      - ./src/AudienciaBundle:/var/www/html/src/AudienciaBundle
+      - ./templates/audiencia:/var/www/html/templates/audiencia
+      - ./translations/AudienciaBundle.pt_BR.yaml:/var/www/html/translations/AudienciaBundle.pt_BR.yaml
+      - ./config/bundles.php:/var/www/html/config/bundles.php
+      - ./config/services.yaml:/var/www/html/config/services.yaml
+
+  mercure:
+    image: novosga/mercure:v0.11
+    restart: always
+    ports:
+      - "7002:3000"
+    environment:
+      SERVER_NAME: ':3000'
+      MERCURE_PUBLISHER_JWT_KEY: '!ChangeThisMercureHubJWTSecretKey!'
+      MERCURE_EXTRA_DIRECTIVES: 'anonymous 1; cors_origins *'
+
+  mysqldb:
+    image: mysql:8.0
+    restart: always
+    ports:
+      - "7003:3306"
+    environment:
+      MYSQL_USER: 'novosga'
+      MYSQL_DATABASE: 'novosga2'
+      MYSQL_ROOT_PASSWORD: 'MySQL_r00t_P4ssW0rd'
+      MYSQL_PASSWORD: 'MySQL_App_P4ssW0rd'
+      TZ: 'America/Sao_Paulo'
+    volumes:
+      - db_data:/var/lib/mysql
+
+volumes:
+  db_data:
