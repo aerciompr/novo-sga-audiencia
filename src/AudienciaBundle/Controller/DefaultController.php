@@ -5,6 +5,8 @@ namespace App\AudienciaBundle\Controller;
 use Exception;
 use Novosga\Entity\Atendimento;
 use Novosga\Entity\Local;
+use Novosga\Entity\Prioridade;
+use Novosga\Entity\ServicoUsuario;
 use Novosga\Entity\Usuario;
 use Novosga\Http\Envelope;
 use Novosga\Service\AtendimentoService;
@@ -69,6 +71,228 @@ class DefaultController extends AbstractController
     }
 
     /**
+     * @Route("/audiencias", name="audiencias_list", methods={"GET"})
+     */
+    public function audienciasList()
+    {
+        /** @var Usuario */
+        $usuario = $this->getUser();
+        $unidade = $usuario->getLotacao()->getUnidade();
+        $conn = $this->getDoctrine()->getConnection();
+
+        $audiencias = $conn->fetchAllAssociative(
+            'SELECT id, titulo, status, criado_em FROM audiencia WHERE unidade_id = :unidadeId ORDER BY id DESC',
+            ['unidadeId' => $unidade->getId()]
+        );
+
+        foreach ($audiencias as &$audiencia) {
+            $pessoas = $conn->fetchAllAssociative(
+                'SELECT id, audiencia_id, parte_id, tipo, nome, documento, atendimento_id, criado_em
+                 FROM audiencia_pessoa
+                 WHERE audiencia_id = :audienciaId
+                 ORDER BY id ASC',
+                ['audienciaId' => (int) $audiencia['id']]
+            );
+
+            $partes = [];
+            $testemunhasPorParte = [];
+
+            foreach ($pessoas as $pessoa) {
+                $pessoa['id'] = (int) $pessoa['id'];
+                $pessoa['audiencia_id'] = (int) $pessoa['audiencia_id'];
+                $pessoa['parte_id'] = $pessoa['parte_id'] ? (int) $pessoa['parte_id'] : null;
+                $pessoa['atendimento_id'] = $pessoa['atendimento_id'] ? (int) $pessoa['atendimento_id'] : null;
+
+                if ($pessoa['tipo'] === 'parte') {
+                    $pessoa['testemunhas'] = [];
+                    $partes[$pessoa['id']] = $pessoa;
+                } else {
+                    $parteId = (int) $pessoa['parte_id'];
+                    if (!isset($testemunhasPorParte[$parteId])) {
+                        $testemunhasPorParte[$parteId] = [];
+                    }
+                    $testemunhasPorParte[$parteId][] = $pessoa;
+                }
+            }
+
+            foreach ($partes as $parteId => &$parte) {
+                $parte['testemunhas'] = $testemunhasPorParte[$parteId] ?? [];
+            }
+
+            $audiencia['id'] = (int) $audiencia['id'];
+            $audiencia['partes'] = array_values($partes);
+        }
+
+        return $this->json(new Envelope($audiencias));
+    }
+
+    /**
+     * @Route("/audiencias", name="audiencias_create", methods={"POST"})
+     */
+    public function audienciasCreate(Request $request)
+    {
+        $data = json_decode($request->getContent(), true) ?: [];
+        $titulo = trim((string) ($data['titulo'] ?? ''));
+
+        if ($titulo === '') {
+            throw new Exception('Informe o título da audiência');
+        }
+
+        /** @var Usuario */
+        $usuario = $this->getUser();
+        $unidade = $usuario->getLotacao()->getUnidade();
+
+        $conn = $this->getDoctrine()->getConnection();
+        $conn->insert('audiencia', [
+            'unidade_id' => $unidade->getId(),
+            'titulo' => $titulo,
+            'status' => 'ativa',
+            'criado_em' => date('Y-m-d H:i:s'),
+        ]);
+
+        return $this->json(new Envelope(['id' => (int) $conn->lastInsertId()]));
+    }
+
+    /**
+     * @Route("/audiencias/{id}/partes", name="audiencias_partes_create", methods={"POST"})
+     */
+    public function partesCreate(Request $request, int $id)
+    {
+        $data = json_decode($request->getContent(), true) ?: [];
+        $nome = trim((string) ($data['nome'] ?? ''));
+        $documento = trim((string) ($data['documento'] ?? ''));
+
+        if ($nome === '') {
+            throw new Exception('Informe o nome da parte');
+        }
+
+        $conn = $this->getDoctrine()->getConnection();
+        $this->assertAudienciaExiste($id, $conn);
+
+        $conn->insert('audiencia_pessoa', [
+            'audiencia_id' => $id,
+            'parte_id' => null,
+            'tipo' => 'parte',
+            'nome' => $nome,
+            'documento' => $documento ?: null,
+            'atendimento_id' => null,
+            'criado_em' => date('Y-m-d H:i:s'),
+        ]);
+
+        return $this->json(new Envelope(['id' => (int) $conn->lastInsertId()]));
+    }
+
+    /**
+     * @Route("/audiencias/{id}/testemunhas", name="audiencias_testemunhas_create", methods={"POST"})
+     */
+    public function testemunhasCreate(Request $request, int $id)
+    {
+        $data = json_decode($request->getContent(), true) ?: [];
+        $parteId = (int) ($data['parteId'] ?? 0);
+        $nome = trim((string) ($data['nome'] ?? ''));
+        $documento = trim((string) ($data['documento'] ?? ''));
+
+        if ($nome === '') {
+            throw new Exception('Informe o nome da testemunha');
+        }
+        if ($parteId <= 0) {
+            throw new Exception('Informe a parte vinculada à testemunha');
+        }
+
+        $conn = $this->getDoctrine()->getConnection();
+        $this->assertAudienciaExiste($id, $conn);
+
+        $parte = $conn->fetchAssociative(
+            'SELECT id FROM audiencia_pessoa WHERE id = :id AND audiencia_id = :audienciaId AND tipo = :tipo',
+            ['id' => $parteId, 'audienciaId' => $id, 'tipo' => 'parte']
+        );
+
+        if (!$parte) {
+            throw new Exception('Parte inválida para vínculo da testemunha');
+        }
+
+        $conn->insert('audiencia_pessoa', [
+            'audiencia_id' => $id,
+            'parte_id' => $parteId,
+            'tipo' => 'testemunha',
+            'nome' => $nome,
+            'documento' => $documento ?: null,
+            'atendimento_id' => null,
+            'criado_em' => date('Y-m-d H:i:s'),
+        ]);
+
+        return $this->json(new Envelope(['id' => (int) $conn->lastInsertId()]));
+    }
+
+    /**
+     * @Route("/pessoas/{id}/chamar", name="pessoa_chamar", methods={"POST"})
+     */
+    public function chamarPessoa(
+        int $id,
+        AtendimentoService $atendimentoService,
+        UsuarioService $usuarioService,
+        TranslatorInterface $translator
+    ) {
+        $conn = $this->getDoctrine()->getConnection();
+
+        /** @var Usuario */
+        $usuario = $this->getUser();
+        $unidade = $usuario->getLotacao()->getUnidade();
+
+        $pessoa = $conn->fetchAssociative('SELECT * FROM audiencia_pessoa WHERE id = :id', ['id' => $id]);
+        if (!$pessoa) {
+            throw new Exception('Pessoa da audiência não encontrada');
+        }
+
+        $atual = $atendimentoService->atendimentoAndamento($usuario->getId(), $unidade);
+
+        $atendimento = null;
+        if (!empty($pessoa['atendimento_id'])) {
+            $atendimento = $this->getDoctrine()->getRepository(Atendimento::class)->find((int) $pessoa['atendimento_id']);
+        }
+
+        if ($atual && (!$atendimento || $atual->getId() !== $atendimento->getId())) {
+            throw new Exception($translator->trans('error.attendance.in_process', [], self::DOMAIN));
+        }
+
+        if (!$atendimento) {
+            $serviceId = $this->resolveServiceIdForTipo($pessoa['tipo'], $usuarioService, $usuario, $unidade);
+            $prioridadeId = $this->resolvePrioridadePadraoId();
+
+            $atendimento = $atendimentoService->distribuiSenha(
+                $unidade->getId(),
+                $usuario->getId(),
+                $serviceId,
+                $prioridadeId,
+                null
+            );
+
+            $conn->update('audiencia_pessoa', [
+                'atendimento_id' => $atendimento->getId(),
+            ], [
+                'id' => $id,
+            ]);
+        }
+
+        $localId = $this->getLocalAtendimento($usuarioService, $usuario);
+        $numeroLocal = $this->getNumeroLocalAtendimento($usuarioService, $usuario);
+        $local = $this->getDoctrine()->getRepository(Local::class)->find($localId);
+
+        if (!$local || !$numeroLocal) {
+            throw new Exception($translator->trans('error.place', [], self::DOMAIN));
+        }
+
+        $sucesso = $atendimentoService->chamar($atendimento, $usuario, $local, $numeroLocal);
+        if (!$sucesso) {
+            throw new Exception($translator->trans('error.attendance.in_process', [], self::DOMAIN));
+        }
+
+        $atendimentoService->chamarSenha($unidade, $atendimento);
+
+        return $this->json(new Envelope($atendimento->jsonSerialize()));
+    }
+
+    /**
      * @Route("/set_local", name="setlocal", methods={"POST"})
      */
     public function setLocal(
@@ -122,49 +346,6 @@ class DefaultController extends AbstractController
     }
 
     /**
-     * @Route("/ajax_update", name="ajaxupdate", methods={"GET"})
-     */
-    public function ajaxUpdate(FilaService $filaService, UsuarioService $usuarioService)
-    {
-        $envelope = new Envelope();
-
-        /** @var Usuario */
-        $usuario = $this->getUser();
-        $unidade = $usuario->getLotacao()->getUnidade();
-        $localId = $this->getLocalAtendimento($usuarioService, $usuario) ?? 0;
-        $numeroLocal = $this->getNumeroLocalAtendimento($usuarioService, $usuario);
-        $tipo = $this->getTipoAtendimento($usuarioService, $usuario);
-
-        $local = $this->getDoctrine()->getRepository(Local::class)->find($localId);
-
-        $servicos = $usuarioService->servicos($usuario, $unidade);
-        $atendimentos = $filaService->filaAtendimento($unidade, $usuario, $servicos, $tipo);
-
-        $filas = [
-            'parte' => [],
-            'testemunha' => [],
-        ];
-
-        foreach ($atendimentos as $atendimento) {
-            $grupo = $this->grupoAtendimento($atendimento);
-            $filas[$grupo][] = $atendimento;
-        }
-
-        $envelope->setData([
-            'total' => count($atendimentos),
-            'filas' => $filas,
-            'usuario' => [
-                'id' => $usuario->getId(),
-                'local' => $local,
-                'numeroLocal' => $numeroLocal,
-                'tipoAtendimento' => $tipo,
-            ],
-        ]);
-
-        return $this->json($envelope);
-    }
-
-    /**
      * @Route("/atendimento", name="atendimento", methods={"GET"})
      */
     public function atendimentoAtual(AtendimentoService $atendimentoService)
@@ -175,55 +356,6 @@ class DefaultController extends AbstractController
         $atendimentoAtual = $atendimentoService->atendimentoAndamento($usuario->getId(), $unidade);
 
         return $this->json(new Envelope($atendimentoAtual));
-    }
-
-    /**
-     * @Route("/chamar/atendimento/{id}", name="chamar_atendimento", methods={"POST"})
-     */
-    public function chamarAtendimento(
-        Atendimento $atendimento,
-        AtendimentoService $atendimentoService,
-        FilaService $filaService,
-        UsuarioService $usuarioService,
-        TranslatorInterface $translator
-    ) {
-        $envelope = new Envelope();
-
-        /** @var Usuario */
-        $usuario = $this->getUser();
-        $unidade = $usuario->getLotacao()->getUnidade();
-
-        $atual = $atendimentoService->atendimentoAndamento($usuario->getId(), $unidade);
-        if ($atual && $atual->getId() !== $atendimento->getId()) {
-            throw new Exception($translator->trans('error.attendance.in_process', [], self::DOMAIN));
-        }
-
-        $servicos = $usuarioService->servicos($usuario, $unidade);
-        $tipo = $this->getTipoAtendimento($usuarioService, $usuario);
-        $fila = $filaService->filaAtendimento($unidade, $usuario, $servicos, $tipo);
-
-        $ids = array_map(function (Atendimento $item) {
-            return $item->getId();
-        }, $fila);
-
-        if (!in_array($atendimento->getId(), $ids, true) && (!$atual || $atual->getId() !== $atendimento->getId())) {
-            throw new Exception($translator->trans('error.attendance.invalid', [], self::DOMAIN));
-        }
-
-        $localId = $this->getLocalAtendimento($usuarioService, $usuario);
-        $numeroLocal = $this->getNumeroLocalAtendimento($usuarioService, $usuario);
-        $local = $this->getDoctrine()->getRepository(Local::class)->find($localId);
-
-        $sucesso = $atendimentoService->chamar($atendimento, $usuario, $local, $numeroLocal);
-        if (!$sucesso) {
-            throw new Exception($translator->trans('error.attendance.in_process', [], self::DOMAIN));
-        }
-
-        $atendimentoService->chamarSenha($unidade, $atendimento);
-
-        $envelope->setData($atendimento->jsonSerialize());
-
-        return $this->json($envelope);
     }
 
     /**
@@ -285,15 +417,63 @@ class DefaultController extends AbstractController
         return $this->json(new Envelope());
     }
 
-    private function grupoAtendimento(Atendimento $atendimento)
+    private function assertAudienciaExiste(int $id, $conn): void
     {
-        $nomeServico = mb_strtolower((string) $atendimento->getServico()->getNome());
+        $exists = $conn->fetchOne('SELECT id FROM audiencia WHERE id = :id', ['id' => $id]);
+        if (!$exists) {
+            throw new Exception('Audiência não encontrada');
+        }
+    }
 
-        if (mb_strpos($nomeServico, 'testemunh') !== false) {
-            return 'testemunha';
+    private function resolveServiceIdForTipo(string $tipo, UsuarioService $usuarioService, Usuario $usuario, $unidade): int
+    {
+        $servicosUsuario = $usuarioService->servicos($usuario, $unidade);
+
+        $matches = [];
+        $fallback = null;
+
+        /** @var ServicoUsuario $servicoUsuario */
+        foreach ($servicosUsuario as $servicoUsuario) {
+            $servico = $servicoUsuario->getServico();
+            $nome = mb_strtolower((string) $servico->getNome());
+            if ($fallback === null) {
+                $fallback = (int) $servico->getId();
+            }
+
+            if ($tipo === 'testemunha' && mb_strpos($nome, 'testemunh') !== false) {
+                $matches[] = (int) $servico->getId();
+            }
+
+            if ($tipo === 'parte' && mb_strpos($nome, 'parte') !== false) {
+                $matches[] = (int) $servico->getId();
+            }
         }
 
-        return 'parte';
+        if (count($matches)) {
+            return (int) $matches[0];
+        }
+
+        if ($fallback !== null) {
+            return (int) $fallback;
+        }
+
+        throw new Exception('Nenhum serviço disponível para o conciliador');
+    }
+
+    private function resolvePrioridadePadraoId(): int
+    {
+        $repo = $this->getDoctrine()->getRepository(Prioridade::class);
+        $prioridade = $repo->findOneBy(['peso' => 0]);
+
+        if (!$prioridade) {
+            $prioridade = $repo->findOneBy([], ['id' => 'ASC']);
+        }
+
+        if (!$prioridade) {
+            throw new Exception('Nenhuma prioridade cadastrada');
+        }
+
+        return (int) $prioridade->getId();
     }
 
     private function getLocalAtendimento(UsuarioService $usuarioService, Usuario $usuario)

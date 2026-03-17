@@ -5,15 +5,14 @@
 {% block body %}
     <div id="audiencia" v-cloak>
         <div class="row mb-3">
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <a href="#dialog-local" data-toggle="modal" class="btn btn-outline-secondary btn-block">
                     <strong v-text="usuario.local ? usuario.local.nome : '{{ 'label.place'|trans }}'"></strong>
                     <span class="ml-2" v-text="usuario.numeroLocal"></span>
                 </a>
-                <small class="text-muted d-block mt-2">{{ 'label.attendance_type'|trans }}: {% verbatim %}{{ tiposAtendimento[usuario.tipoAtendimento] }}{% endverbatim %}</small>
             </div>
-            <div class="col-md-9 text-right">
-                <button type="button" class="btn btn-secondary" :disabled="!atendimento || busy" @click="chamarNovamente">
+            <div class="col-md-8 text-right">
+                <button type="button" class="btn btn-secondary" :disabled="!atendimento || busy" @click="rechamarAtual">
                     {{ 'button.call_again'|trans }}
                 </button>
                 <button type="button" class="btn btn-primary" :disabled="!atendimento || atendimento.status !== 'chamado' || busy" @click="iniciar">
@@ -28,7 +27,7 @@
             </div>
         </div>
 
-        <div class="card mb-4" v-if="atendimento">
+        <div class="card mb-3" v-if="atendimento">
             <div class="card-header">{{ 'label.current_call'|trans }}</div>
             <div class="card-body">
                 <strong>{% verbatim %}{{ atendimento.senha.format }}{% endverbatim %}</strong>
@@ -37,46 +36,77 @@
             </div>
         </div>
 
-        <div class="row">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>{{ 'queue.partes'|trans }}</span>
-                        <span class="badge badge-primary">{% verbatim %}{{ filas.parte.length }}{% endverbatim %}</span>
-                    </div>
-                    <ul class="list-group list-group-flush" v-if="filas.parte.length">
-                        <li class="list-group-item d-flex justify-content-between align-items-center" v-for="item in filas.parte" :key="item.id">
-                            <div>
-                                <strong>{% verbatim %}{{ item.senha.format }}{% endverbatim %}</strong>
-                                <small class="text-muted d-block">{% verbatim %}{{ item.servico.nome }}{% endverbatim %}</small>
-                            </div>
-                            <button type="button" class="btn btn-sm btn-outline-primary" :disabled="busy" @click="chamarAtendimento(item)">
-                                {{ 'button.call'|trans }}
-                            </button>
-                        </li>
-                    </ul>
-                    <div class="card-body text-muted" v-else>{{ 'queue.empty'|trans }}</div>
-                </div>
+        <div class="card mb-3">
+            <div class="card-header">{{ 'label.new_audience'|trans }}</div>
+            <div class="card-body">
+                <form class="form-inline" @submit.prevent="criarAudiencia">
+                    <input type="text" class="form-control mr-2" v-model="novo.tituloAudiencia" :placeholder="labels.audienceTitle" required>
+                    <button type="submit" class="btn btn-primary" :disabled="busy">{{ 'button.create_audience'|trans }}</button>
+                </form>
             </div>
+        </div>
 
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>{{ 'queue.testemunhas'|trans }}</span>
-                        <span class="badge badge-primary">{% verbatim %}{{ filas.testemunha.length }}{% endverbatim %}</span>
+        <div class="card mb-3" v-for="audiencia in audiencias" :key="audiencia.id">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>{% verbatim %}{{ audiencia.titulo }}{% endverbatim %}</strong>
+                <span class="badge badge-light">ID {% verbatim %}{{ audiencia.id }}{% endverbatim %}</span>
+            </div>
+            <div class="card-body">
+                <form class="form-row align-items-end mb-3" @submit.prevent="adicionarParte(audiencia)">
+                    <div class="col-md-5">
+                        <label class="small">{{ 'label.part_name'|trans }}</label>
+                        <input type="text" class="form-control" v-model="audiencia._novaParteNome" :placeholder="labels.partName" required>
                     </div>
-                    <ul class="list-group list-group-flush" v-if="filas.testemunha.length">
-                        <li class="list-group-item d-flex justify-content-between align-items-center" v-for="item in filas.testemunha" :key="item.id">
+                    <div class="col-md-4">
+                        <label class="small">{{ 'label.document'|trans }}</label>
+                        <input type="text" class="form-control" v-model="audiencia._novaParteDocumento" :placeholder="labels.document">
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-outline-primary btn-block" :disabled="busy">{{ 'button.add_part'|trans }}</button>
+                    </div>
+                </form>
+
+                <div v-if="!audiencia.partes || audiencia.partes.length === 0" class="text-muted">{{ 'label.no_parts'|trans }}</div>
+
+                <div class="card mb-2" v-for="parte in audiencia.partes" :key="parte.id">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
-                                <strong>{% verbatim %}{{ item.senha.format }}{% endverbatim %}</strong>
-                                <small class="text-muted d-block">{% verbatim %}{{ item.servico.nome }}{% endverbatim %}</small>
+                                <strong>{% verbatim %}{{ parte.nome }}{% endverbatim %}</strong>
+                                <small class="text-muted ml-2">{% verbatim %}{{ parte.documento || '' }}{% endverbatim %}</small>
                             </div>
-                            <button type="button" class="btn btn-sm btn-outline-primary" :disabled="busy" @click="chamarAtendimento(item)">
-                                {{ 'button.call'|trans }}
+                            <button type="button" class="btn btn-sm btn-primary" :disabled="busy" @click="chamarPessoa(parte)">
+                                {{ 'button.call_part'|trans }}
                             </button>
-                        </li>
-                    </ul>
-                    <div class="card-body text-muted" v-else>{{ 'queue.empty'|trans }}</div>
+                        </div>
+
+                        <form class="form-row align-items-end mb-2" @submit.prevent="adicionarTestemunha(audiencia, parte)">
+                            <div class="col-md-5">
+                                <label class="small">{{ 'label.witness_name'|trans }}</label>
+                                <input type="text" class="form-control" v-model="parte._novaTestemunhaNome" :placeholder="labels.witnessName" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="small">{{ 'label.document'|trans }}</label>
+                                <input type="text" class="form-control" v-model="parte._novaTestemunhaDocumento" :placeholder="labels.document">
+                            </div>
+                            <div class="col-md-3">
+                                <button type="submit" class="btn btn-outline-secondary btn-block" :disabled="busy">{{ 'button.add_witness'|trans }}</button>
+                            </div>
+                        </form>
+
+                        <ul class="list-group" v-if="parte.testemunhas && parte.testemunhas.length">
+                            <li class="list-group-item d-flex justify-content-between align-items-center" v-for="testemunha in parte.testemunhas" :key="testemunha.id">
+                                <div>
+                                    {% verbatim %}{{ testemunha.nome }}{% endverbatim %}
+                                    <small class="text-muted ml-2">{% verbatim %}{{ testemunha.documento || '' }}{% endverbatim %}</small>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" :disabled="busy" @click="chamarPessoa(testemunha)">
+                                    {{ 'button.call_witness'|trans }}
+                                </button>
+                            </li>
+                        </ul>
+                        <small class="text-muted" v-else>{{ 'label.no_witnesses'|trans }}</small>
+                    </div>
                 </div>
             </div>
         </div>
@@ -147,27 +177,40 @@
                 unidade: unidade || {},
                 atendimento: atendimento || null,
                 tiposAtendimento: tiposAtendimento,
-                filas: {
-                    parte: [],
-                    testemunha: [],
+                audiencias: [],
+                novo: {
+                    tituloAudiencia: '',
                 },
                 novoLocal: {
                     local: local ? local.id : null,
                     numeroLocal: numeroLocal,
                     tipoAtendimento: tipoAtendimento,
                 },
+                labels: {
+                    audienceTitle: '{{ 'label.audience_title_placeholder'|trans }}',
+                    partName: '{{ 'label.part_name_placeholder'|trans }}',
+                    witnessName: '{{ 'label.witness_name_placeholder'|trans }}',
+                    document: '{{ 'label.document_placeholder'|trans }}',
+                },
             },
             methods: {
-                update() {
+                carregarAudiencias() {
                     App.ajax({
-                        url: App.url('/audiencia/ajax_update'),
+                        url: App.url('/audiencia/audiencias'),
                         success: (response) => {
-                            const data = response.data || {};
-                            this.filas = data.filas || { parte: [], testemunha: [] };
-                            this.usuario = data.usuario || this.usuario;
+                            this.audiencias = (response.data || []).map((audiencia) => {
+                                audiencia._novaParteNome = '';
+                                audiencia._novaParteDocumento = '';
+                                (audiencia.partes || []).forEach((parte) => {
+                                    parte._novaTestemunhaNome = '';
+                                    parte._novaTestemunhaDocumento = '';
+                                });
+                                return audiencia;
+                            });
                         },
                     });
-
+                },
+                carregarAtendimentoAtual() {
                     App.ajax({
                         url: App.url('/audiencia/atendimento'),
                         success: (response) => {
@@ -186,29 +229,108 @@
                             this.usuario.tipoAtendimento = response.data.tipo;
                             this.novoLocal.local = response.data.local.id;
                             $('#dialog-local').modal('hide');
-                            this.update();
                         },
                     });
                 },
-                chamarAtendimento(item) {
+                criarAudiencia() {
+                    if (!this.novo.tituloAudiencia) {
+                        return;
+                    }
                     this.busy = true;
                     App.ajax({
-                        url: App.url('/audiencia/chamar/atendimento/' + item.id),
+                        url: App.url('/audiencia/audiencias'),
+                        type: 'post',
+                        data: { titulo: this.novo.tituloAudiencia },
+                        success: () => {
+                            this.novo.tituloAudiencia = '';
+                            this.carregarAudiencias();
+                        },
+                        complete: () => this.busy = false,
+                    });
+                },
+                adicionarParte(audiencia) {
+                    if (!audiencia._novaParteNome) {
+                        return;
+                    }
+                    this.busy = true;
+                    App.ajax({
+                        url: App.url('/audiencia/audiencias/' + audiencia.id + '/partes'),
+                        type: 'post',
+                        data: {
+                            nome: audiencia._novaParteNome,
+                            documento: audiencia._novaParteDocumento,
+                        },
+                        success: () => {
+                            audiencia._novaParteNome = '';
+                            audiencia._novaParteDocumento = '';
+                            this.carregarAudiencias();
+                        },
+                        complete: () => this.busy = false,
+                    });
+                },
+                adicionarTestemunha(audiencia, parte) {
+                    if (!parte._novaTestemunhaNome) {
+                        return;
+                    }
+                    this.busy = true;
+                    App.ajax({
+                        url: App.url('/audiencia/audiencias/' + audiencia.id + '/testemunhas'),
+                        type: 'post',
+                        data: {
+                            parteId: parte.id,
+                            nome: parte._novaTestemunhaNome,
+                            documento: parte._novaTestemunhaDocumento,
+                        },
+                        success: () => {
+                            parte._novaTestemunhaNome = '';
+                            parte._novaTestemunhaDocumento = '';
+                            this.carregarAudiencias();
+                        },
+                        complete: () => this.busy = false,
+                    });
+                },
+                chamarPessoa(pessoa) {
+                    this.busy = true;
+                    App.ajax({
+                        url: App.url('/audiencia/pessoas/' + pessoa.id + '/chamar'),
                         type: 'post',
                         success: (response) => {
-                            this.atendimento = response.data;
-                            this.update();
+                            this.atendimento = response.data || null;
+                            this.carregarAtendimentoAtual();
                         },
                         complete: () => {
-                            setTimeout(() => this.busy = false, 800);
+                            setTimeout(() => this.busy = false, 1000);
                         },
                     });
                 },
-                chamarNovamente() {
+                rechamarAtual() {
                     if (!this.atendimento) {
                         return;
                     }
-                    this.chamarAtendimento(this.atendimento);
+                    this.busy = true;
+                    App.ajax({
+                        url: App.url('/audiencia/pessoas/' + this.buscarPessoaPorAtendimento(this.atendimento.id) + '/chamar'),
+                        type: 'post',
+                        complete: () => {
+                            setTimeout(() => this.busy = false, 1000);
+                        },
+                    });
+                },
+                buscarPessoaPorAtendimento(atendimentoId) {
+                    let pessoaId = null;
+                    this.audiencias.forEach((audiencia) => {
+                        (audiencia.partes || []).forEach((parte) => {
+                            if (parte.atendimento_id === atendimentoId) {
+                                pessoaId = parte.id;
+                            }
+                            (parte.testemunhas || []).forEach((testemunha) => {
+                                if (testemunha.atendimento_id === atendimentoId) {
+                                    pessoaId = testemunha.id;
+                                }
+                            });
+                        });
+                    });
+                    return pessoaId;
                 },
                 iniciar() {
                     App.ajax({
@@ -225,7 +347,6 @@
                         type: 'post',
                         success: () => {
                             this.atendimento = null;
-                            this.update();
                         },
                     });
                 },
@@ -235,7 +356,6 @@
                         type: 'post',
                         success: () => {
                             this.atendimento = null;
-                            this.update();
                         },
                     });
                 },
@@ -245,14 +365,17 @@
                     $('#dialog-local').modal('show');
                 }
 
-                this.update();
+                this.carregarAudiencias();
+                this.carregarAtendimentoAtual();
 
                 App.SSE.connect([
                     '/unidades/' + this.unidade.id + '/fila',
                     '/usuarios/' + this.usuario.id + '/fila',
                 ]);
-                App.SSE.onmessage = () => this.update();
-                App.SSE.ondisconnect = () => this.update();
+
+                App.SSE.onmessage = () => {
+                    this.carregarAtendimentoAtual();
+                };
             },
         });
     </script>
