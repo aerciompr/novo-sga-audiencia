@@ -339,6 +339,18 @@ class DefaultController extends AbstractController
         $atendimento = null;
         if (!empty($pessoa['atendimento_id'])) {
             $atendimento = $this->getDoctrine()->getRepository(Atendimento::class)->find((int) $pessoa['atendimento_id']);
+            if ($atendimento) {
+                $statusAtendimentoPessoa = (string) $atendimento->getStatus();
+                if (!in_array($statusAtendimentoPessoa, ['chamado', 'iniciado'], true)) {
+                    // Atendimento antigo já foi concluído/expirou: cria um novo na próxima chamada.
+                    $atendimento = null;
+                    $conn->update('audiencia_pessoa', [
+                        'atendimento_id' => null,
+                    ], [
+                        'id' => $id,
+                    ]);
+                }
+            }
         }
 
         if ($atual && (!$atendimento || $atual->getId() !== $atendimento->getId())) {
@@ -527,9 +539,17 @@ class DefaultController extends AbstractController
             throw new Exception($translator->trans('error.attendance.not_in_process', [], self::DOMAIN));
         }
 
-        $atendimentoService->encerrar($atual, $unidade, [
-            $atual->getServico()->getId(),
-        ]);
+        $serviceId = (int) $atual->getServico()->getId();
+        $codificacaoExiste = (int) $this->getDoctrine()->getConnection()->fetchOne(
+            'SELECT COUNT(*) FROM atendimentos_codificados WHERE atendimento_id = :atendimentoId AND servico_id = :servicoId',
+            [
+                'atendimentoId' => (int) $atual->getId(),
+                'servicoId' => $serviceId,
+            ]
+        ) > 0;
+        $codificacoes = $codificacaoExiste ? [] : [$serviceId];
+
+        $atendimentoService->encerrar($atual, $unidade, $codificacoes);
         $this->getDoctrine()->getConnection()->executeStatement(
             "UPDATE audiencia_pessoa SET situacao = 'finalizado' WHERE atendimento_id = :atendimentoId",
             ['atendimentoId' => $atual->getId()]
