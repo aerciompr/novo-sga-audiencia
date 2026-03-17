@@ -4,6 +4,7 @@ WORKDIR /var/www/html
 
 # Custom module and app overrides
 COPY src/AudienciaBundle /var/www/html/src/AudienciaBundle
+COPY src/Infrastructure/Storage/RelationalStorage.php /var/www/html/src/Infrastructure/Storage/RelationalStorage.php
 COPY templates/audiencia /var/www/html/templates/audiencia
 COPY translations/AudienciaBundle.pt_BR.yaml /var/www/html/translations/AudienciaBundle.pt_BR.yaml
 COPY config/bundles.php /var/www/html/config/bundles.php
