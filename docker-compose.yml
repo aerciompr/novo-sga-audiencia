@@ -30,7 +30,7 @@ services:
       MERCURE_PUBLIC_URL: 'http://${PUBLIC_HOST:-localhost}:7002/.well-known/mercure'
       MERCURE_JWT_SECRET: '!ChangeMe!'
       MERCURE_JWT_TOKEN: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJtZXJjdXJlIjp7InB1Ymxpc2giOltdfX0.Oo0yg7y4yMa1vr_bziltxuTCqb8JVHKxp-f_FwwOim0'
-      MERCURE_CONSUMER_URL: '/.well-known/mercure'
+      MERCURE_CONSUMER_URL: 'http://${PUBLIC_HOST:-localhost}:7002/.well-known/mercure'
 
   mercure:
     image: novosga/mercure:v0.11
