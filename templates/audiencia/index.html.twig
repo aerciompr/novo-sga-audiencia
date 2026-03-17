@@ -47,12 +47,26 @@
             </div>
         </div>
 
+        <div class="mb-3">
+            <div class="btn-group" role="group">
+                <button type="button" class="btn" :class="filtroStatus === 'ativas' ? 'btn-primary' : 'btn-outline-primary'" @click="alterarFiltro('ativas')">
+                    {{ 'filter.active'|trans }}
+                </button>
+                <button type="button" class="btn" :class="filtroStatus === 'finalizadas' ? 'btn-primary' : 'btn-outline-primary'" @click="alterarFiltro('finalizadas')">
+                    {{ 'filter.finished'|trans }}
+                </button>
+                <button type="button" class="btn" :class="filtroStatus === 'todas' ? 'btn-primary' : 'btn-outline-primary'" @click="alterarFiltro('todas')">
+                    {{ 'filter.all'|trans }}
+                </button>
+            </div>
+        </div>
+
         <div class="card mb-3" v-for="audiencia in audiencias" :key="audiencia.id">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <strong>{% verbatim %}{{ audiencia.titulo }}{% endverbatim %}</strong>
                 <div>
                     <span class="badge badge-light">{% verbatim %}{{ audiencia.sala }}{% endverbatim %}</span>
-                    <button type="button" class="btn btn-sm btn-success ml-2" :disabled="busy" @click="finalizarAudiencia(audiencia)">
+                    <button type="button" class="btn btn-sm btn-success ml-2" :disabled="busy" @click="finalizarAudiencia(audiencia)" v-if="audiencia.status === 'ativa'">
                         {{ 'button.finish_audience'|trans }}
                     </button>
                 </div>
@@ -186,6 +200,7 @@
                 atendimento: atendimento || null,
                 tiposAtendimento: tiposAtendimento,
                 audiencias: [],
+                filtroStatus: 'ativas',
                 novo: {
                     tituloAudiencia: '',
                     salaAudiencia: '',
@@ -214,6 +229,7 @@
                 carregarAudiencias() {
                     App.ajax({
                         url: App.url('/audiencia/audiencias'),
+                        data: { status: this.filtroStatus },
                         success: (response) => {
                             this.audiencias = (response.data || []).map((audiencia) => {
                                 audiencia._novaParteNome = '';
@@ -224,6 +240,10 @@
                             });
                         },
                     });
+                },
+                alterarFiltro(status) {
+                    this.filtroStatus = status;
+                    this.carregarAudiencias();
                 },
                 carregarAtendimentoAtual() {
                     App.ajax({

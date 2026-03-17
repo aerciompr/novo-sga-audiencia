@@ -74,20 +74,39 @@ class DefaultController extends AbstractController
     /**
      * @Route("/audiencias", name="audiencias_list", methods={"GET"})
      */
-    public function audienciasList()
+    public function audienciasList(Request $request)
     {
         /** @var Usuario */
         $usuario = $this->getUser();
         $unidade = $usuario->getLotacao()->getUnidade();
+        $statusFilter = strtolower((string) $request->get('status', 'ativas'));
         $conn = $this->getDoctrine()->getConnection();
 
-        $audiencias = $conn->fetchAllAssociative(
-            'SELECT id, titulo, sala, status, criado_em
-             FROM audiencia
-             WHERE unidade_id = :unidadeId AND status = :status
-             ORDER BY id DESC',
-            ['unidadeId' => $unidade->getId(), 'status' => 'ativa']
-        );
+        if ($statusFilter === 'todas') {
+            $audiencias = $conn->fetchAllAssociative(
+                'SELECT id, titulo, sala, status, criado_em
+                 FROM audiencia
+                 WHERE unidade_id = :unidadeId
+                 ORDER BY id DESC',
+                ['unidadeId' => $unidade->getId()]
+            );
+        } elseif ($statusFilter === 'finalizadas') {
+            $audiencias = $conn->fetchAllAssociative(
+                'SELECT id, titulo, sala, status, criado_em
+                 FROM audiencia
+                 WHERE unidade_id = :unidadeId AND status = :status
+                 ORDER BY id DESC',
+                ['unidadeId' => $unidade->getId(), 'status' => 'finalizada']
+            );
+        } else {
+            $audiencias = $conn->fetchAllAssociative(
+                'SELECT id, titulo, sala, status, criado_em
+                 FROM audiencia
+                 WHERE unidade_id = :unidadeId AND status = :status
+                 ORDER BY id DESC',
+                ['unidadeId' => $unidade->getId(), 'status' => 'ativa']
+            );
+        }
 
         foreach ($audiencias as &$audiencia) {
             $pessoas = $conn->fetchAllAssociative(
