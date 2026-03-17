@@ -50,7 +50,12 @@
         <div class="card mb-3" v-for="audiencia in audiencias" :key="audiencia.id">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <strong>{% verbatim %}{{ audiencia.titulo }}{% endverbatim %}</strong>
-                <span class="badge badge-light">{% verbatim %}{{ audiencia.sala }}{% endverbatim %}</span>
+                <div>
+                    <span class="badge badge-light">{% verbatim %}{{ audiencia.sala }}{% endverbatim %}</span>
+                    <button type="button" class="btn btn-sm btn-success ml-2" :disabled="busy" @click="finalizarAudiencia(audiencia)">
+                        {{ 'button.finish_audience'|trans }}
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 <form class="form-row align-items-end mb-3" @submit.prevent="adicionarParte(audiencia)">
@@ -70,6 +75,7 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
                                 <strong>{% verbatim %}{{ parte.nome }}{% endverbatim %}</strong>
+                                <span class="badge badge-info ml-2">{% verbatim %}{{ labels.status[parte.situacao] || parte.situacao }}{% endverbatim %}</span>
                             </div>
                             <div>
                                 <button type="button" class="btn btn-sm btn-primary" :disabled="busy" @click="chamarPessoa(parte)" v-if="parte.atendimento_status !== 'iniciado'">
@@ -95,9 +101,10 @@
                             <li class="list-group-item d-flex justify-content-between align-items-center" v-for="testemunha in parte.testemunhas" :key="testemunha.id">
                                 <div>
                                     {% verbatim %}{{ testemunha.nome }}{% endverbatim %}
+                                    <span class="badge badge-info ml-2">{% verbatim %}{{ labels.status[testemunha.situacao] || testemunha.situacao }}{% endverbatim %}</span>
                                 </div>
                                 <div>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" :disabled="busy" @click="chamarPessoa(testemunha)">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" :disabled="busy" @click="chamarPessoa(testemunha)" v-if="testemunha.situacao !== 'compareceu' && testemunha.situacao !== 'finalizado'">
                                         {{ 'button.call_witness'|trans }}
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-danger" :disabled="busy" @click="removerTestemunha(testemunha)">
@@ -193,6 +200,14 @@
                     audienceRoom: '{{ 'label.audience_room_placeholder'|trans }}',
                     partName: '{{ 'label.part_name_placeholder'|trans }}',
                     witnessName: '{{ 'label.witness_name_placeholder'|trans }}',
+                    status: {
+                        aguardando: '{{ 'status.waiting'|trans }}',
+                        chamado: '{{ 'status.called'|trans }}',
+                        compareceu: '{{ 'status.checked_in'|trans }}',
+                        iniciado: '{{ 'status.in_progress'|trans }}',
+                        finalizado: '{{ 'status.done'|trans }}',
+                        nao_compareceu: '{{ 'status.no_show'|trans }}',
+                    }
                 },
             },
             methods: {
@@ -264,6 +279,18 @@
                             audiencia._novaParteNome = '';
                             this.carregarAudiencias();
                         },
+                        complete: () => this.busy = false,
+                    });
+                },
+                finalizarAudiencia(audiencia) {
+                    if (!confirm('{{ 'confirm.finish_audience'|trans }}')) {
+                        return;
+                    }
+                    this.busy = true;
+                    App.ajax({
+                        url: App.url('/audiencia/audiencias/' + audiencia.id + '/finalizar'),
+                        type: 'post',
+                        success: () => this.carregarAudiencias(),
                         complete: () => this.busy = false,
                     });
                 },
@@ -363,6 +390,7 @@
                         type: 'post',
                         success: (response) => {
                             this.atendimento = response.data;
+                            this.carregarAudiencias();
                         },
                     });
                 },
@@ -372,6 +400,7 @@
                         type: 'post',
                         success: () => {
                             this.atendimento = null;
+                            this.carregarAudiencias();
                         },
                     });
                 },
@@ -381,6 +410,7 @@
                         type: 'post',
                         success: () => {
                             this.atendimento = null;
+                            this.carregarAudiencias();
                         },
                     });
                 },

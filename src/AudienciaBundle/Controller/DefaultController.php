@@ -82,13 +82,16 @@ class DefaultController extends AbstractController
         $conn = $this->getDoctrine()->getConnection();
 
         $audiencias = $conn->fetchAllAssociative(
-            'SELECT id, titulo, sala, status, criado_em FROM audiencia WHERE unidade_id = :unidadeId ORDER BY id DESC',
-            ['unidadeId' => $unidade->getId()]
+            'SELECT id, titulo, sala, status, criado_em
+             FROM audiencia
+             WHERE unidade_id = :unidadeId AND status = :status
+             ORDER BY id DESC',
+            ['unidadeId' => $unidade->getId(), 'status' => 'ativa']
         );
 
         foreach ($audiencias as &$audiencia) {
             $pessoas = $conn->fetchAllAssociative(
-                'SELECT p.id, p.audiencia_id, p.parte_id, p.tipo, p.nome, p.documento, p.atendimento_id, p.criado_em, a.status AS atendimento_status
+                'SELECT p.id, p.audiencia_id, p.parte_id, p.tipo, p.nome, p.documento, p.atendimento_id, p.criado_em, p.situacao, p.dt_chamada, a.status AS atendimento_status
                  FROM audiencia_pessoa p
                  LEFT JOIN atendimentos a ON a.id = p.atendimento_id
                  WHERE audiencia_id = :audienciaId
@@ -104,6 +107,7 @@ class DefaultController extends AbstractController
                 $pessoa['audiencia_id'] = (int) $pessoa['audiencia_id'];
                 $pessoa['parte_id'] = $pessoa['parte_id'] ? (int) $pessoa['parte_id'] : null;
                 $pessoa['atendimento_id'] = $pessoa['atendimento_id'] ? (int) $pessoa['atendimento_id'] : null;
+                $pessoa['situacao'] = $pessoa['situacao'] ?: 'aguardando';
 
                 if ($pessoa['tipo'] === 'parte') {
                     $pessoa['testemunhas'] = [];
@@ -182,6 +186,7 @@ class DefaultController extends AbstractController
             'nome' => $nome,
             'documento' => null,
             'atendimento_id' => null,
+            'situacao' => 'aguardando',
             'criado_em' => date('Y-m-d H:i:s'),
         ]);
 
@@ -223,6 +228,7 @@ class DefaultController extends AbstractController
             'nome' => $nome,
             'documento' => null,
             'atendimento_id' => null,
+            'situacao' => 'aguardando',
             'criado_em' => date('Y-m-d H:i:s'),
         ]);
 
@@ -321,6 +327,12 @@ class DefaultController extends AbstractController
                 // Reusa o atendimento em andamento da parte apenas para emitir a chamada da testemunha no painel.
                 $atendimentoService->chamarSenha($unidade, $atual);
                 $this->atualizarMensagemPainel($atual, (string) $pessoa['nome'], (string) $pessoa['sala']);
+                $conn->update('audiencia_pessoa', [
+                    'situacao' => 'compareceu',
+                    'dt_chamada' => date('Y-m-d H:i:s'),
+                ], [
+                    'id' => $id,
+                ]);
 
                 return $this->json(new Envelope($atual->jsonSerialize()));
             }
@@ -344,6 +356,8 @@ class DefaultController extends AbstractController
 
             $conn->update('audiencia_pessoa', [
                 'atendimento_id' => $atendimento->getId(),
+                'situacao' => 'compareceu',
+                'dt_chamada' => date('Y-m-d H:i:s'),
             ], [
                 'id' => $id,
             ]);
@@ -449,6 +463,10 @@ class DefaultController extends AbstractController
         }
 
         $atendimentoService->iniciarAtendimento($atual, $usuario);
+        $this->getDoctrine()->getConnection()->executeStatement(
+            "UPDATE audiencia_pessoa SET situacao = 'iniciado' WHERE atendimento_id = :atendimentoId",
+            ['atendimentoId' => $atual->getId()]
+        );
 
         return $this->json(new Envelope($atual));
     }
@@ -468,6 +486,10 @@ class DefaultController extends AbstractController
         }
 
         $atendimentoService->naoCompareceu($atual, $usuario);
+        $this->getDoctrine()->getConnection()->executeStatement(
+            "UPDATE audiencia_pessoa SET situacao = 'nao_compareceu' WHERE atendimento_id = :atendimentoId",
+            ['atendimentoId' => $atual->getId()]
+        );
 
         return $this->json(new Envelope());
     }
@@ -489,6 +511,39 @@ class DefaultController extends AbstractController
         $atendimentoService->encerrar($atual, $unidade, [
             $atual->getServico()->getId(),
         ]);
+        $this->getDoctrine()->getConnection()->executeStatement(
+            "UPDATE audiencia_pessoa SET situacao = 'finalizado' WHERE atendimento_id = :atendimentoId",
+            ['atendimentoId' => $atual->getId()]
+        );
+
+        return $this->json(new Envelope());
+    }
+
+    /**
+     * @Route("/audiencias/{id}/finalizar", name="audiencias_finalizar", methods={"POST"})
+     */
+    public function finalizarAudiencia(int $id, AtendimentoService $atendimentoService)
+    {
+        /** @var Usuario */
+        $usuario = $this->getUser();
+        $unidade = $usuario->getLotacao()->getUnidade();
+        $atual = $atendimentoService->atendimentoAndamento($usuario->getId(), $unidade);
+
+        if ($atual) {
+            throw new Exception('Finalize o atendimento em andamento antes de concluir a audiência');
+        }
+
+        $conn = $this->getDoctrine()->getConnection();
+        $updated = $conn->update('audiencia', [
+            'status' => 'finalizada',
+        ], [
+            'id' => $id,
+            'unidade_id' => $unidade->getId(),
+        ]);
+
+        if (!$updated) {
+            throw new Exception('Audiência não encontrada');
+        }
 
         return $this->json(new Envelope());
     }
