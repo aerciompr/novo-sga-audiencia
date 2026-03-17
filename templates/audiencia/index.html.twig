@@ -54,13 +54,9 @@
             </div>
             <div class="card-body">
                 <form class="form-row align-items-end mb-3" @submit.prevent="adicionarParte(audiencia)">
-                    <div class="col-md-5">
+                    <div class="col-md-9">
                         <label class="small">{{ 'label.part_name'|trans }}</label>
                         <input type="text" class="form-control" v-model="audiencia._novaParteNome" :placeholder="labels.partName" required>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="small">{{ 'label.document'|trans }}</label>
-                        <input type="text" class="form-control" v-model="audiencia._novaParteDocumento" :placeholder="labels.document">
                     </div>
                     <div class="col-md-3">
                         <button type="submit" class="btn btn-outline-primary btn-block" :disabled="busy">{{ 'button.add_part'|trans }}</button>
@@ -74,21 +70,21 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <div>
                                 <strong>{% verbatim %}{{ parte.nome }}{% endverbatim %}</strong>
-                                <small class="text-muted ml-2">{% verbatim %}{{ parte.documento || '' }}{% endverbatim %}</small>
                             </div>
-                            <button type="button" class="btn btn-sm btn-primary" :disabled="busy" @click="chamarPessoa(parte)">
-                                {{ 'button.call_part'|trans }}
-                            </button>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-primary" :disabled="busy" @click="chamarPessoa(parte)">
+                                    {{ 'button.call_part'|trans }}
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" :disabled="busy" @click="removerParte(parte)">
+                                    {{ 'button.delete_part'|trans }}
+                                </button>
+                            </div>
                         </div>
 
                         <form class="form-row align-items-end mb-2" @submit.prevent="adicionarTestemunha(audiencia, parte)">
-                            <div class="col-md-5">
+                            <div class="col-md-9">
                                 <label class="small">{{ 'label.witness_name'|trans }}</label>
                                 <input type="text" class="form-control" v-model="parte._novaTestemunhaNome" :placeholder="labels.witnessName" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="small">{{ 'label.document'|trans }}</label>
-                                <input type="text" class="form-control" v-model="parte._novaTestemunhaDocumento" :placeholder="labels.document">
                             </div>
                             <div class="col-md-3">
                                 <button type="submit" class="btn btn-outline-secondary btn-block" :disabled="busy">{{ 'button.add_witness'|trans }}</button>
@@ -99,11 +95,15 @@
                             <li class="list-group-item d-flex justify-content-between align-items-center" v-for="testemunha in parte.testemunhas" :key="testemunha.id">
                                 <div>
                                     {% verbatim %}{{ testemunha.nome }}{% endverbatim %}
-                                    <small class="text-muted ml-2">{% verbatim %}{{ testemunha.documento || '' }}{% endverbatim %}</small>
                                 </div>
-                                <button type="button" class="btn btn-sm btn-outline-primary" :disabled="busy" @click="chamarPessoa(testemunha)">
-                                    {{ 'button.call_witness'|trans }}
-                                </button>
+                                <div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" :disabled="busy" @click="chamarPessoa(testemunha)">
+                                        {{ 'button.call_witness'|trans }}
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" :disabled="busy" @click="removerTestemunha(testemunha)">
+                                        {{ 'button.delete_witness'|trans }}
+                                    </button>
+                                </div>
                             </li>
                         </ul>
                         <small class="text-muted" v-else>{{ 'label.no_witnesses'|trans }}</small>
@@ -193,7 +193,6 @@
                     audienceRoom: '{{ 'label.audience_room_placeholder'|trans }}',
                     partName: '{{ 'label.part_name_placeholder'|trans }}',
                     witnessName: '{{ 'label.witness_name_placeholder'|trans }}',
-                    document: '{{ 'label.document_placeholder'|trans }}',
                 },
             },
             methods: {
@@ -203,10 +202,8 @@
                         success: (response) => {
                             this.audiencias = (response.data || []).map((audiencia) => {
                                 audiencia._novaParteNome = '';
-                                audiencia._novaParteDocumento = '';
                                 (audiencia.partes || []).forEach((parte) => {
                                     parte._novaTestemunhaNome = '';
-                                    parte._novaTestemunhaDocumento = '';
                                 });
                                 return audiencia;
                             });
@@ -262,11 +259,9 @@
                         type: 'post',
                         data: {
                             nome: audiencia._novaParteNome,
-                            documento: audiencia._novaParteDocumento,
                         },
                         success: () => {
                             audiencia._novaParteNome = '';
-                            audiencia._novaParteDocumento = '';
                             this.carregarAudiencias();
                         },
                         complete: () => this.busy = false,
@@ -283,13 +278,35 @@
                         data: {
                             parteId: parte.id,
                             nome: parte._novaTestemunhaNome,
-                            documento: parte._novaTestemunhaDocumento,
                         },
                         success: () => {
                             parte._novaTestemunhaNome = '';
-                            parte._novaTestemunhaDocumento = '';
                             this.carregarAudiencias();
                         },
+                        complete: () => this.busy = false,
+                    });
+                },
+                removerParte(parte) {
+                    if (!confirm('{{ 'confirm.delete_part'|trans }}')) {
+                        return;
+                    }
+                    this.busy = true;
+                    App.ajax({
+                        url: App.url('/audiencia/partes/' + parte.id),
+                        type: 'delete',
+                        success: () => this.carregarAudiencias(),
+                        complete: () => this.busy = false,
+                    });
+                },
+                removerTestemunha(testemunha) {
+                    if (!confirm('{{ 'confirm.delete_witness'|trans }}')) {
+                        return;
+                    }
+                    this.busy = true;
+                    App.ajax({
+                        url: App.url('/audiencia/testemunhas/' + testemunha.id),
+                        type: 'delete',
+                        success: () => this.carregarAudiencias(),
                         complete: () => this.busy = false,
                     });
                 },

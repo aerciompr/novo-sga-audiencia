@@ -165,7 +165,6 @@ class DefaultController extends AbstractController
     {
         $data = json_decode($request->getContent(), true) ?: [];
         $nome = trim((string) ($data['nome'] ?? ''));
-        $documento = trim((string) ($data['documento'] ?? ''));
 
         if ($nome === '') {
             throw new Exception('Informe o nome da parte');
@@ -179,7 +178,7 @@ class DefaultController extends AbstractController
             'parte_id' => null,
             'tipo' => 'parte',
             'nome' => $nome,
-            'documento' => $documento ?: null,
+            'documento' => null,
             'atendimento_id' => null,
             'criado_em' => date('Y-m-d H:i:s'),
         ]);
@@ -195,7 +194,6 @@ class DefaultController extends AbstractController
         $data = json_decode($request->getContent(), true) ?: [];
         $parteId = (int) ($data['parteId'] ?? 0);
         $nome = trim((string) ($data['nome'] ?? ''));
-        $documento = trim((string) ($data['documento'] ?? ''));
 
         if ($nome === '') {
             throw new Exception('Informe o nome da testemunha');
@@ -221,12 +219,63 @@ class DefaultController extends AbstractController
             'parte_id' => $parteId,
             'tipo' => 'testemunha',
             'nome' => $nome,
-            'documento' => $documento ?: null,
+            'documento' => null,
             'atendimento_id' => null,
             'criado_em' => date('Y-m-d H:i:s'),
         ]);
 
         return $this->json(new Envelope(['id' => (int) $conn->lastInsertId()]));
+    }
+
+    /**
+     * @Route("/partes/{id}", name="partes_delete", methods={"DELETE"})
+     */
+    public function parteDelete(int $id)
+    {
+        $conn = $this->getDoctrine()->getConnection();
+        $parte = $conn->fetchAssociative(
+            'SELECT id, audiencia_id FROM audiencia_pessoa WHERE id = :id AND tipo = :tipo',
+            ['id' => $id, 'tipo' => 'parte']
+        );
+
+        if (!$parte) {
+            throw new Exception('Parte não encontrada');
+        }
+
+        $conn->beginTransaction();
+        try {
+            $conn->delete('audiencia_pessoa', [
+                'audiencia_id' => $parte['audiencia_id'],
+                'parte_id' => $id,
+            ]);
+            $conn->delete('audiencia_pessoa', [
+                'id' => $id,
+            ]);
+            $conn->commit();
+        } catch (\Throwable $e) {
+            $conn->rollBack();
+            throw $e;
+        }
+
+        return $this->json(new Envelope());
+    }
+
+    /**
+     * @Route("/testemunhas/{id}", name="testemunhas_delete", methods={"DELETE"})
+     */
+    public function testemunhaDelete(int $id)
+    {
+        $conn = $this->getDoctrine()->getConnection();
+        $deleted = $conn->delete('audiencia_pessoa', [
+            'id' => $id,
+            'tipo' => 'testemunha',
+        ]);
+
+        if (!$deleted) {
+            throw new Exception('Testemunha não encontrada');
+        }
+
+        return $this->json(new Envelope());
     }
 
     /**
