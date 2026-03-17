@@ -28,7 +28,7 @@ services:
       TZ: 'America/Sao_Paulo'
       MERCURE_URL: 'http://mercure:3000/.well-known/mercure'
       MERCURE_PUBLIC_URL: 'http://${PUBLIC_HOST:-localhost}:7002/.well-known/mercure'
-      MERCURE_JWT_SECRET: '!ChangeThisMercureHubJWTSecretKey!'
+      MERCURE_JWT_SECRET: '!ChangeMe!'
       MERCURE_JWT_TOKEN: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJtZXJjdXJlIjp7InB1Ymxpc2giOltdfX0.Oo0yg7y4yMa1vr_bziltxuTCqb8JVHKxp-f_FwwOim0'
       MERCURE_CONSUMER_URL: '/.well-known/mercure'
 
@@ -39,7 +39,7 @@ services:
       - "7002:3000"
     environment:
       SERVER_NAME: ':3000'
-      MERCURE_PUBLISHER_JWT_KEY: '!ChangeThisMercureHubJWTSecretKey!'
+      MERCURE_PUBLISHER_JWT_KEY: '!ChangeMe!'
       MERCURE_EXTRA_DIRECTIVES: 'anonymous 1; cors_origins *'
 
   mysqldb:
